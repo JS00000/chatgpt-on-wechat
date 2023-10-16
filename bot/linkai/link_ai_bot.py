@@ -12,7 +12,7 @@ from bot.session_manager import SessionManager
 from bridge.context import Context, ContextType
 from bridge.reply import Reply, ReplyType
 from common.log import logger
-from config import conf
+from config import conf, pconf
 
 
 class LinkAIBot(Bot, OpenAIImage):
@@ -22,8 +22,8 @@ class LinkAIBot(Bot, OpenAIImage):
 
     def __init__(self):
         super().__init__()
-        self.base_url = "https://api.link-ai.chat/v1"
         self.sessions = SessionManager(ChatGPTSession, model=conf().get("model") or "gpt-3.5-turbo")
+        self.args = {}
 
     def reply(self, query, context: Context = None) -> Reply:
         if context.type == ContextType.TEXT:
@@ -73,17 +73,21 @@ class LinkAIBot(Bot, OpenAIImage):
             body = {
                 "app_code": app_code,
                 "messages": session.messages,
-                "model": model,     # 对话模型的名称, 支持 gpt-3.5-turbo, gpt-3.5-turbo-16k, gpt-4, wenxin
+                "model": model,     # 对话模型的名称, 支持 gpt-3.5-turbo, gpt-3.5-turbo-16k, gpt-4, wenxin, xunfei
                 "temperature": conf().get("temperature"),
                 "top_p": conf().get("top_p", 1),
                 "frequency_penalty": conf().get("frequency_penalty", 0.0),  # [-2,2]之间，该值越大则更倾向于产生不同的内容
                 "presence_penalty": conf().get("presence_penalty", 0.0),  # [-2,2]之间，该值越大则更倾向于产生不同的内容
             }
-            logger.info(f"[LINKAI] query={query}, app_code={app_code}, mode={body.get('model')}")
+            file_id = context.kwargs.get("file_id")
+            if file_id:
+                body["file_id"] = file_id
+            logger.info(f"[LINKAI] query={query}, app_code={app_code}, mode={body.get('model')}, file_id={file_id}")
             headers = {"Authorization": "Bearer " + linkai_api_key}
 
             # do http request
-            res = requests.post(url=self.base_url + "/chat/completions", json=body, headers=headers,
+            base_url = conf().get("linkai_api_base", "https://api.link-ai.chat")
+            res = requests.post(url=base_url + "/v1/chat/completions", json=body, headers=headers,
                                 timeout=conf().get("request_timeout", 180))
             if res.status_code == 200:
                 # execute success
@@ -92,6 +96,9 @@ class LinkAIBot(Bot, OpenAIImage):
                 total_tokens = response["usage"]["total_tokens"]
                 logger.info(f"[LINKAI] reply={reply_content}, total_tokens={total_tokens}")
                 self.sessions.session_reply(reply_content, session_id, total_tokens)
+                suffix = self._fecth_knowledge_search_suffix(response)
+                if suffix:
+                    reply_content += suffix
                 return Reply(ReplyType.TEXT, reply_content)
 
             else:
@@ -114,3 +121,86 @@ class LinkAIBot(Bot, OpenAIImage):
             time.sleep(2)
             logger.warn(f"[LINKAI] do retry, times={retry_count}")
             return self._chat(query, context, retry_count + 1)
+
+    def reply_text(self, session: ChatGPTSession, app_code="", retry_count=0) -> dict:
+        if retry_count >= 2:
+            # exit from retry 2 times
+            logger.warn("[LINKAI] failed after maximum number of retry times")
+            return {
+                "total_tokens": 0,
+                "completion_tokens": 0,
+                "content": "请再问我一次吧"
+            }
+
+        try:
+            body = {
+                "app_code": app_code,
+                "messages": session.messages,
+                "model": conf().get("model") or "gpt-3.5-turbo",  # 对话模型的名称, 支持 gpt-3.5-turbo, gpt-3.5-turbo-16k, gpt-4, wenxin, xunfei
+                "temperature": conf().get("temperature"),
+                "top_p": conf().get("top_p", 1),
+                "frequency_penalty": conf().get("frequency_penalty", 0.0),  # [-2,2]之间，该值越大则更倾向于产生不同的内容
+                "presence_penalty": conf().get("presence_penalty", 0.0),  # [-2,2]之间，该值越大则更倾向于产生不同的内容
+            }
+            if self.args.get("max_tokens"):
+                body["max_tokens"] = self.args.get("max_tokens")
+            headers = {"Authorization": "Bearer " +  conf().get("linkai_api_key")}
+
+            # do http request
+            base_url = conf().get("linkai_api_base", "https://api.link-ai.chat")
+            res = requests.post(url=base_url + "/v1/chat/completions", json=body, headers=headers,
+                                timeout=conf().get("request_timeout", 180))
+            if res.status_code == 200:
+                # execute success
+                response = res.json()
+                reply_content = response["choices"][0]["message"]["content"]
+                total_tokens = response["usage"]["total_tokens"]
+                logger.info(f"[LINKAI] reply={reply_content}, total_tokens={total_tokens}")
+                return {
+                    "total_tokens": total_tokens,
+                    "completion_tokens": response["usage"]["completion_tokens"],
+                    "content": reply_content,
+                }
+
+            else:
+                response = res.json()
+                error = response.get("error")
+                logger.error(f"[LINKAI] chat failed, status_code={res.status_code}, "
+                             f"msg={error.get('message')}, type={error.get('type')}")
+
+                if res.status_code >= 500:
+                    # server error, need retry
+                    time.sleep(2)
+                    logger.warn(f"[LINKAI] do retry, times={retry_count}")
+                    return self.reply_text(session, app_code, retry_count + 1)
+
+                return {
+                    "total_tokens": 0,
+                    "completion_tokens": 0,
+                    "content": "提问太快啦，请休息一下再问我吧"
+                }
+
+        except Exception as e:
+            logger.exception(e)
+            # retry
+            time.sleep(2)
+            logger.warn(f"[LINKAI] do retry, times={retry_count}")
+            return self.reply_text(session, app_code, retry_count + 1)
+
+
+    def _fecth_knowledge_search_suffix(self, response) -> str:
+        try:
+            if response.get("knowledge_base"):
+                search_hit = response.get("knowledge_base").get("search_hit")
+                first_similarity = response.get("knowledge_base").get("first_similarity")
+                logger.info(f"[LINKAI] knowledge base, search_hit={search_hit}, first_similarity={first_similarity}")
+                plugin_config = pconf("linkai")
+                if plugin_config.get("knowledge_base") and plugin_config.get("knowledge_base").get("search_miss_text_enabled"):
+                    search_miss_similarity = plugin_config.get("knowledge_base").get("search_miss_similarity")
+                    search_miss_text = plugin_config.get("knowledge_base").get("search_miss_suffix")
+                    if not search_hit:
+                        return search_miss_text
+                    if search_miss_similarity and float(search_miss_similarity) > first_similarity:
+                        return search_miss_text
+        except Exception as e:
+            logger.exception(e)

@@ -4,15 +4,15 @@ import json
 import os
 import random
 import string
-import traceback
+import logging
 from typing import Tuple
 
+import bridge.bridge
 import plugins
 from bridge.bridge import Bridge
 from bridge.context import ContextType
 from bridge.reply import Reply, ReplyType
 from common import const
-from common.log import logger
 from config import conf, load_config, global_config
 from plugins import *
 
@@ -32,15 +32,19 @@ COMMANDS = {
         "args": ["口令"],
         "desc": "管理员认证",
     },
-    # "set_openai_api_key": {
-    #     "alias": ["set_openai_api_key"],
-    #     "args": ["api_key"],
-    #     "desc": "设置你的OpenAI私有api_key",
-    # },
-    # "reset_openai_api_key": {
-    #     "alias": ["reset_openai_api_key"],
-    #     "desc": "重置为默认的api_key",
-    # },
+    "set_openai_api_key": {
+        "alias": ["set_openai_api_key"],
+        "args": ["api_key"],
+        "desc": "设置你的OpenAI私有api_key",
+    },
+    "reset_openai_api_key": {
+        "alias": ["reset_openai_api_key"],
+        "desc": "重置为默认的api_key",
+    },
+    "model": {
+        "alias": ["model", "模型"],
+        "desc": "查看和设置全局模型",
+    },
     "set_model": {
         "alias": ["set_model"],
         "desc": "设置你的语言模型",
@@ -209,6 +213,7 @@ class Godcmd(Plugin):
 
         self.password = gconf["password"]
         self.admin_users = gconf["admin_users"]  # 预存的管理员账号，这些账号不需要认证。itchat的用户名每次都会变，不可用
+        global_config["admin_users"] = self.admin_users
         self.isrunning = True  # 机器人是否运行中
 
         self.handlers[Event.ON_HANDLE_CONTEXT] = self.on_handle_context
@@ -267,22 +272,34 @@ class Godcmd(Plugin):
                                 break
                         if not ok:
                             result = "插件不存在或未启用"
+                elif cmd == "model":
+                    if not isadmin and not self.is_admin_in_group(e_context["context"]):
+                        ok, result = False, "需要管理员权限执行"
+                    elif len(args) == 0:
+                        ok, result = True, "当前模型为: " + str(conf().get("model"))
+                    elif len(args) == 1:
+                        if args[0] not in const.MODEL_LIST:
+                            ok, result = False, "模型名称不存在"
+                        else:
+                            conf()["model"] = args[0]
+                            Bridge().reset_bot()
+                            ok, result = True, "模型设置为: " + str(conf().get("model"))
                 elif cmd == "id":
                     ok, result = True, user
-                # elif cmd == "set_openai_api_key":
-                #     if len(args) == 1:
-                #         user_data = conf().get_user_data(user)
-                #         user_data["openai_api_key"] = args[0]
-                #         ok, result = True, "你的OpenAI私有api_key已设置为" + args[0]
-                #     else:
-                #         ok, result = False, "请提供一个api_key"
-                # elif cmd == "reset_openai_api_key":
-                #     try:
-                #         user_data = conf().get_user_data(user)
-                #         user_data.pop("openai_api_key")
-                #         ok, result = True, "你的OpenAI私有api_key已清除"
-                #     except Exception as e:
-                #         ok, result = False, "你没有设置私有api_key"
+                elif cmd == "set_openai_api_key":
+                    if len(args) == 1:
+                        user_data = conf().get_user_data(user)
+                        user_data["openai_api_key"] = args[0]
+                        ok, result = True, "你的OpenAI私有api_key已设置为" + args[0]
+                    else:
+                        ok, result = False, "请提供一个api_key"
+                elif cmd == "reset_openai_api_key":
+                    try:
+                        user_data = conf().get_user_data(user)
+                        user_data.pop("openai_api_key")
+                        ok, result = True, "你的OpenAI私有api_key已清除"
+                    except Exception as e:
+                        ok, result = False, "你没有设置私有api_key"
                 elif cmd == "set_model":
                     if len(args) == 1:
                         user_data = conf().get_user_data(user)
@@ -310,8 +327,10 @@ class Godcmd(Plugin):
                     except Exception as e:
                         ok, result = False, "你没有设置私有语言模型"
                 elif cmd == "reset":
-                    if bottype in [const.OPEN_AI, const.CHATGPT, const.CHATGPTONAZURE, const.LINKAI]:
+                    if bottype in [const.OPEN_AI, const.CHATGPT, const.CHATGPTONAZURE, const.LINKAI, const.BAIDU, const.XUNFEI]:
                         bot.sessions.clear_session(session_id)
+                        if Bridge().chat_bots.get(bottype):
+                            Bridge().chat_bots.get(bottype).sessions.clear_session(session_id)
                         channel.cancel_session(session_id)
                         ok, result = True, "会话已重置"
                     else:
@@ -333,15 +352,20 @@ class Godcmd(Plugin):
                             load_config()
                             ok, result = True, "配置已重载"
                         elif cmd == "resetall":
-                            if bottype in [const.OPEN_AI, const.CHATGPT, const.CHATGPTONAZURE, const.LINKAI]:
+                            if bottype in [const.OPEN_AI, const.CHATGPT, const.CHATGPTONAZURE, const.LINKAI,
+                                           const.BAIDU, const.XUNFEI]:
                                 channel.cancel_all_session()
                                 bot.sessions.clear_all_session()
                                 ok, result = True, "重置所有会话成功"
                             else:
                                 ok, result = False, "当前对话机器人不支持重置会话"
                         elif cmd == "debug":
-                            logger.setLevel("DEBUG")
-                            ok, result = True, "DEBUG模式已开启"
+                            if logger.getEffectiveLevel() == logging.DEBUG:  # 判断当前日志模式是否DEBUG
+                                logger.setLevel(logging.INFO)
+                                ok, result = True, "DEBUG模式已关闭"
+                            else:
+                                logger.setLevel(logging.DEBUG)
+                                ok, result = True, "DEBUG模式已开启"
                         elif cmd == "access":
                             if len(args) == 2:
                                 user_data = conf().get_user_data(args[0])
@@ -469,3 +493,9 @@ class Godcmd(Plugin):
 
     def get_help_text(self, isadmin=False, isgroup=False, **kwargs):
         return get_help_text(isadmin, isgroup)
+
+
+    def is_admin_in_group(self, context):
+        if context["isgroup"]:
+            return context.kwargs.get("msg").actual_user_id in global_config["admin_users"]
+        return False
