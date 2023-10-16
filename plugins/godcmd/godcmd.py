@@ -32,26 +32,26 @@ COMMANDS = {
         "args": ["口令"],
         "desc": "管理员认证",
     },
-    "set_openai_api_key": {
-        "alias": ["set_openai_api_key"],
-        "args": ["api_key"],
-        "desc": "设置你的OpenAI私有api_key",
+    # "set_openai_api_key": {
+    #     "alias": ["set_openai_api_key"],
+    #     "args": ["api_key"],
+    #     "desc": "设置你的OpenAI私有api_key",
+    # },
+    # "reset_openai_api_key": {
+    #     "alias": ["reset_openai_api_key"],
+    #     "desc": "重置为默认的api_key",
+    # },
+    "set_model": {
+        "alias": ["set_model"],
+        "desc": "设置你的语言模型",
     },
-    "reset_openai_api_key": {
-        "alias": ["reset_openai_api_key"],
-        "desc": "重置为默认的api_key",
+    "reset_model": {
+        "alias": ["reset_model"],
+        "desc": "重置你的语言模型",
     },
-    "set_gpt_model": {
-        "alias": ["set_gpt_model"],
-        "desc": "设置你的私有模型",
-    },
-    "reset_gpt_model": {
-        "alias": ["reset_gpt_model"],
-        "desc": "重置你的私有模型",
-    },
-    "gpt_model": {
-        "alias": ["gpt_model"],
-        "desc": "查询你使用的模型",
+    "get_model": {
+        "alias": ["get_model"],
+        "desc": "查询你使用的语言模型",
     },
     "id": {
         "alias": ["id", "用户"],
@@ -79,6 +79,16 @@ ADMIN_COMMANDS = {
     "resetall": {
         "alias": ["resetall", "重置所有会话"],
         "desc": "重置所有会话",
+    },
+    "access": {
+        "alias": ["access"],
+        "args": ["user_id", "model"],
+        "desc": "给用户添加模型权限",
+    },
+    "reset_user": {
+        "alias": ["reset_user"],
+        "args": ["user_id"],
+        "desc": "重置用户数据",
     },
     "scanp": {
         "alias": ["scanp", "扫描插件"],
@@ -259,40 +269,46 @@ class Godcmd(Plugin):
                             result = "插件不存在或未启用"
                 elif cmd == "id":
                     ok, result = True, user
-                elif cmd == "set_openai_api_key":
+                # elif cmd == "set_openai_api_key":
+                #     if len(args) == 1:
+                #         user_data = conf().get_user_data(user)
+                #         user_data["openai_api_key"] = args[0]
+                #         ok, result = True, "你的OpenAI私有api_key已设置为" + args[0]
+                #     else:
+                #         ok, result = False, "请提供一个api_key"
+                # elif cmd == "reset_openai_api_key":
+                #     try:
+                #         user_data = conf().get_user_data(user)
+                #         user_data.pop("openai_api_key")
+                #         ok, result = True, "你的OpenAI私有api_key已清除"
+                #     except Exception as e:
+                #         ok, result = False, "你没有设置私有api_key"
+                elif cmd == "set_model":
                     if len(args) == 1:
                         user_data = conf().get_user_data(user)
-                        user_data["openai_api_key"] = args[0]
-                        ok, result = True, "你的OpenAI私有api_key已设置为" + args[0]
+                        if not "access" in user_data:
+                            user_data["access"] = {conf().get("model")}
+                        if args[0] in user_data.get("access"):
+                            user_data["model"] = args[0]
+                            ok, result = True, "你的语言模型已设置为" + args[0]
+                        else:
+                            ok = False
+                            result = "设置失败，可选语言模型有: " + str(user_data.get("access"))
                     else:
-                        ok, result = False, "请提供一个api_key"
-                elif cmd == "reset_openai_api_key":
-                    try:
-                        user_data = conf().get_user_data(user)
-                        user_data.pop("openai_api_key")
-                        ok, result = True, "你的OpenAI私有api_key已清除"
-                    except Exception as e:
-                        ok, result = False, "你没有设置私有api_key"
-                elif cmd == "set_gpt_model":
-                    if len(args) == 1:
-                        user_data = conf().get_user_data(user)
-                        user_data["gpt_model"] = args[0]
-                        ok, result = True, "你的GPT模型已设置为" + args[0]
-                    else:
-                        ok, result = False, "请提供一个GPT模型"
-                elif cmd == "gpt_model":
+                        ok, result = False, "请提供一个语言模型"
+                elif cmd == "get_model":
                     user_data = conf().get_user_data(user)
                     model = conf().get("model")
-                    if "gpt_model" in user_data:
-                        model = user_data["gpt_model"]
-                    ok, result = True, "你的GPT模型为" + str(model)
-                elif cmd == "reset_gpt_model":
+                    if "model" in user_data:
+                        model = user_data["model"]
+                    ok, result = True, "你的语言模型为" + str(model)
+                elif cmd == "reset_model":
                     try:
                         user_data = conf().get_user_data(user)
-                        user_data.pop("gpt_model")
-                        ok, result = True, "你的GPT模型已重置"
+                        user_data.pop("model")
+                        ok, result = True, "你的语言模型已重置"
                     except Exception as e:
-                        ok, result = False, "你没有设置私有GPT模型"
+                        ok, result = False, "你没有设置私有语言模型"
                 elif cmd == "reset":
                     if bottype in [const.OPEN_AI, const.CHATGPT, const.CHATGPTONAZURE, const.LINKAI]:
                         bot.sessions.clear_session(session_id)
@@ -326,6 +342,22 @@ class Godcmd(Plugin):
                         elif cmd == "debug":
                             logger.setLevel("DEBUG")
                             ok, result = True, "DEBUG模式已开启"
+                        elif cmd == "access":
+                            if len(args) == 2:
+                                user_data = conf().get_user_data(args[0])
+                                if not "access" in user_data:
+                                    user_data["access"] = {conf().get("model")}
+                                user_data["access"].add(args[1])
+                                user_data["model"] = args[1]
+                                ok, result = True, args[0] + "可访问模型" + str(user_data["access"]) + "，已设置为" + user_data["model"]
+                            else:
+                                ok, result = False, "请提供model和user_id"
+                        elif cmd == "reset_user":
+                            if len(args) == 1:
+                                conf().user_datas.pop(args[0])
+                                ok, result = True, args[0] + "用户已重置"
+                            else:
+                                ok, result = False, "请提供user_id"
                         elif cmd == "plist":
                             plugins = PluginManager().list_plugins()
                             ok = True

@@ -18,7 +18,7 @@ available_setting = {
     # chatgpt模型， 当use_azure_chatgpt为true时，其名称为Azure上model deployment名称
     "model": "gpt-3.5-turbo",    # 还支持 gpt-3.5-turbo-16k, gpt-4, wenxin
     "use_azure_chatgpt": False,  # 是否使用azure的chatgpt
-    "azure_deployment_id": "",  # azure 模型部署名称
+    "azure_deployment_id": "",  #useless 
     "azure_api_version": "",  # azure api版本
     # Bot触发配置
     "single_chat_prefix": ["bot", "@bot"],  # 私聊时文本需要包含该前缀才能触发机器人回复
@@ -155,6 +155,7 @@ class Config(dict):
             with open(os.path.join(get_appdata_dir(), "user_datas.pkl"), "rb") as f:
                 self.user_datas = pickle.load(f)
                 logger.info("[Config] User datas loaded.")
+                print(self.user_datas)
         except FileNotFoundError as e:
             logger.info("[Config] User datas file not found, ignore.")
         except Exception as e:

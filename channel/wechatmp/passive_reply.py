@@ -123,7 +123,8 @@ class Query:
                         return encrypt_func(replyPost.render())
 
                 # reply is ready
-                channel.request_cnt.pop(message_id)
+                if message_id in channel.request_cnt: 
+                    channel.request_cnt.pop(message_id)
 
                 # no return because of bandwords or other reasons
                 if from_user not in channel.cache_dict and from_user not in channel.running:

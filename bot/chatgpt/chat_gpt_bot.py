@@ -65,17 +65,10 @@ class ChatGPTBot(Bot, OpenAIImage):
             session = self.sessions.session_query(query, session_id)
             logger.debug("[CHATGPT] session query={}".format(session.messages))
 
-            api_key = context.get("openai_api_key")
-            model = context.get("gpt_model")
-            new_args = None
-            if model:
-                new_args = self.args.copy()
-                new_args["model"] = model
-            # if context.get('stream'):
-            #     # reply in stream
-            #     return self.reply_text_stream(query, new_query, session_id)
+            self.args["model"] = context.get("model") or conf().get("model")
+            self.args["engine"] = context.get("model") or conf().get("model")
 
-            reply_content = self.reply_text(session, api_key, args=new_args)
+            reply_content = self.reply_text(session)
             logger.debug(
                 "[CHATGPT] new_query={}, session_id={}, reply_cont={}, completion_tokens={}".format(
                     session.messages,
@@ -106,7 +99,7 @@ class ChatGPTBot(Bot, OpenAIImage):
             reply = Reply(ReplyType.ERROR, "Bot不支持处理{}类型的消息".format(context.type))
             return reply
 
-    def reply_text(self, session: ChatGPTSession, api_key=None, args=None, retry_count=0) -> dict:
+    def reply_text(self, session: ChatGPTSession, retry_count=0) -> dict:
         """
         call openai's ChatCompletion to get the answer
         :param session: a conversation session
@@ -117,10 +110,7 @@ class ChatGPTBot(Bot, OpenAIImage):
         try:
             if conf().get("rate_limit_chatgpt") and not self.tb4chatgpt.get_token():
                 raise openai.error.RateLimitError("RateLimitError: rate limit exceeded")
-            # if api_key == None, the default openai.api_key will be used
-            if args is None:
-                args = self.args
-            response = openai.ChatCompletion.create(api_key=api_key, messages=session.messages, **args)
+            response = openai.ChatCompletion.create(messages=session.messages, **self.args)
             # logger.debug("[CHATGPT] response={}".format(response))
             # logger.info("[ChatGPT] reply={}, total_tokens={}".format(response.choices[0]['message']['content'], response["usage"]["total_tokens"]))
             return {
@@ -157,7 +147,7 @@ class ChatGPTBot(Bot, OpenAIImage):
 
             if need_retry:
                 logger.warn("[CHATGPT] 第{}次重试".format(retry_count + 1))
-                return self.reply_text(session, api_key, args, retry_count + 1)
+                return self.reply_text(session, retry_count + 1)
             else:
                 return result
 
@@ -167,7 +157,6 @@ class AzureChatGPTBot(ChatGPTBot):
         super().__init__()
         openai.api_type = "azure"
         openai.api_version = conf().get("azure_api_version", "2023-06-01-preview")
-        self.args["deployment_id"] = conf().get("azure_deployment_id")
 
     def create_img(self, query, retry_count=0, api_key=None):
         api_version = "2022-08-03-preview"

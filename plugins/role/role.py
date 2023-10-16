@@ -170,7 +170,7 @@ class Role(Plugin):
                     self.roles[role][desckey],
                     self.roles[role].get("wrapper", "%s"),
                 )
-                reply = Reply(ReplyType.INFO, f"预设角色为 {role}:\n" + self.roles[role][desckey])
+                reply = Reply(ReplyType.INFO, f"预设角色为 {role}:\n" + self.roles[role]["remark"])
                 e_context["reply"] = reply
                 e_context.action = EventAction.BREAK_PASS
         elif customize == True:

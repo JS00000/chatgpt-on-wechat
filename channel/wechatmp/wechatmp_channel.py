@@ -81,7 +81,7 @@ class WechatMPChannel(ChatChannel):
         if self.passive_reply:
             if reply.type == ReplyType.TEXT or reply.type == ReplyType.INFO or reply.type == ReplyType.ERROR:
                 reply_text = reply.content
-                logger.info("[wechatmp] text cached, receiver {}\n{}".format(receiver, reply_text))
+                logger.info("[wechatmp] text cached, receiver {}\n".format(receiver))
                 self.cache_dict[receiver] = ("text", reply_text)
             elif reply.type == ReplyType.VOICE:
                 try:
