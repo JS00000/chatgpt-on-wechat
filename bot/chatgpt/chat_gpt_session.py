@@ -13,8 +13,7 @@ from common.log import logger
 
 class ChatGPTSession(Session):
     def __init__(self, session_id, system_prompt=None, model="gpt-3.5-turbo"):
-        super().__init__(session_id, system_prompt)
-        self.model = model
+        super().__init__(session_id, system_prompt, model)
         self.reset()
 
     def discard_exceeding(self, max_tokens, cur_tokens=None):
@@ -55,9 +54,6 @@ class ChatGPTSession(Session):
 # refer to https://github.com/openai/openai-cookbook/blob/main/examples/How_to_count_tokens_with_tiktoken.ipynb
 def num_tokens_from_messages(messages, model):
     """Returns the number of tokens used by a list of messages."""
-
-    if model in ["wenxin", "xunfei"]:
-        return num_tokens_by_character(messages)
 
     import tiktoken
 

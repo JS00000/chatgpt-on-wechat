@@ -4,9 +4,10 @@ from config import conf
 
 
 class Session(object):
-    def __init__(self, session_id, system_prompt=None):
+    def __init__(self, session_id, system_prompt=None, model=None):
         self.session_id = session_id
         self.messages = []
+        self.model = model
         if system_prompt is None:
             self.system_prompt = conf().get("character_desc", "")
         else:
@@ -19,6 +20,10 @@ class Session(object):
 
     def set_system_prompt(self, system_prompt):
         self.system_prompt = system_prompt
+        self.reset()
+
+    def set_model(self, model):
+        self.model = model
         self.reset()
 
     def add_query(self, query):
@@ -44,25 +49,29 @@ class SessionManager(object):
             sessions = dict()
         self.sessions = sessions
         self.sessioncls = sessioncls
-        self.session_args = session_args
+        self.default_model = session_args["default_model"]
 
-    def build_session(self, session_id, system_prompt=None):
+    def build_session(self, session_id, system_prompt=None, user_model=None):
         """
         如果session_id不在sessions中，创建一个新的session并添加到sessions中
         如果system_prompt不会空，会更新session的system_prompt并重置session
         """
+        model = user_model or self.default_model
         if session_id is None:
-            return self.sessioncls(session_id, system_prompt, **self.session_args)
-
+            return self.sessioncls(session_id, system_prompt, model)
         if session_id not in self.sessions:
-            self.sessions[session_id] = self.sessioncls(session_id, system_prompt, **self.session_args)
-        elif system_prompt is not None:  # 如果有新的system_prompt，更新并重置session
-            self.sessions[session_id].set_system_prompt(system_prompt)
+            self.sessions[session_id] = self.sessioncls(session_id, system_prompt, model)
+
         session = self.sessions[session_id]
+        if system_prompt is not None:  # 如果有新的system_prompt，更新并重置session
+            session.set_system_prompt(system_prompt)
+        if user_model is not None and session.model != user_model: # 如果有新的model，更新并重置model
+            session.set_model(user_model)
+        print("session.model=", session.model)
         return session
 
-    def session_query(self, query, session_id):
-        session = self.build_session(session_id)
+    def session_query(self, query, session_id, user_model=None):
+        session = self.build_session(session_id, None, user_model)
         session.add_query(query)
         try:
             max_tokens = conf().get("conversation_max_tokens", 1000)

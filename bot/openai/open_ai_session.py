@@ -4,8 +4,7 @@ from common.log import logger
 
 class OpenAISession(Session):
     def __init__(self, session_id, system_prompt=None, model="text-davinci-003"):
-        super().__init__(session_id, system_prompt)
-        self.model = model
+        super().__init__(session_id, system_prompt, model)
         self.reset()
 
     def __str__(self):

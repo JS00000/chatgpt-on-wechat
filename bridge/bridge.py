@@ -18,19 +18,36 @@ class Bridge(object):
             "text_to_voice": conf().get("text_to_voice", "google"),
             "translate": conf().get("translate", "baidu"),
         }
+
+        # default chat bot platform
         model_type = conf().get("model")
-        if model_type in ["text-davinci-003"]:
-            self.btype["chat"] = const.OPEN_AI
         if conf().get("use_azure_chatgpt", False):
             self.btype["chat"] = const.CHATGPTONAZURE
+        if conf().get("use_linkai") and conf().get("linkai_api_key"):
+            self.btype["chat"] = const.LINKAI
+        if model_type in ["text-davinci-003"]:
+            self.btype["chat"] = const.OPEN_AI
         if model_type in ["wenxin"]:
             self.btype["chat"] = const.BAIDU
         if model_type in ["xunfei"]:
             self.btype["chat"] = const.XUNFEI
-        if conf().get("use_linkai") and conf().get("linkai_api_key"):
-            self.btype["chat"] = const.LINKAI
         if model_type in ["claude"]:
             self.btype["chat"] = const.CLAUDEAI
+
+        # specific chat bot platform
+        model_list = conf().get("model_list")
+        for model_type in model_list:
+            if model_type.startswith("gpt"):
+                if conf().get("use_azure_chatgpt", False):
+                    self.btype[model_type] = const.CHATGPTONAZURE
+                else:
+                    self.btype[model_type] = const.CHATGPT
+            if model_type in ["wenxin", "wenxin-turbo", "wenxin-4"]:
+                self.btype[model_type] = const.BAIDU
+            if model_type in ["xunfei"]:
+                self.btype[model_type] = const.XUNFEI
+            if model_type in ["claude"]:
+                self.btype[model_type] = const.CLAUDEAI
         self.bots = {}
         self.chat_bots = {}
 
@@ -45,12 +62,19 @@ class Bridge(object):
                 self.bots[typename] = create_bot(self.btype[typename])
             elif typename == "translate":
                 self.bots[typename] = create_translator(self.btype[typename])
+            else: 
+                # specific chat bot platform
+                self.bots[typename] = create_bot(self.btype[typename])
         return self.bots[typename]
 
     def get_bot_type(self, typename):
         return self.btype[typename]
 
     def fetch_reply_content(self, query, context: Context) -> Reply:
+        # specific chat bot
+        if context["model"] is not None:
+            return self.get_bot(context["model"]).reply(query, context)
+        # default chat bot
         return self.get_bot("chat").reply(query, context)
 
     def fetch_voice_to_text(self, voiceFile) -> Reply:

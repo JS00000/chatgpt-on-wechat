@@ -41,10 +41,6 @@ COMMANDS = {
         "alias": ["reset_openai_api_key"],
         "desc": "重置为默认的api_key",
     },
-    "model": {
-        "alias": ["model", "模型"],
-        "desc": "查看和设置全局模型",
-    },
     "set_model": {
         "alias": ["set_model"],
         "desc": "设置你的语言模型",
@@ -83,6 +79,10 @@ ADMIN_COMMANDS = {
     "resetall": {
         "alias": ["resetall", "重置所有会话"],
         "desc": "重置所有会话",
+    },
+    "model": {
+        "alias": ["model", "模型"],
+        "desc": "查看和设置全局模型",
     },
     "access": {
         "alias": ["access"],
@@ -272,18 +272,6 @@ class Godcmd(Plugin):
                                 break
                         if not ok:
                             result = "插件不存在或未启用"
-                elif cmd == "model":
-                    if not isadmin and not self.is_admin_in_group(e_context["context"]):
-                        ok, result = False, "需要管理员权限执行"
-                    elif len(args) == 0:
-                        ok, result = True, "当前模型为: " + str(conf().get("model"))
-                    elif len(args) == 1:
-                        if args[0] not in const.MODEL_LIST:
-                            ok, result = False, "模型名称不存在"
-                        else:
-                            conf()["model"] = args[0]
-                            Bridge().reset_bot()
-                            ok, result = True, "模型设置为: " + str(conf().get("model"))
                 elif cmd == "id":
                     ok, result = True, user
                 elif cmd == "set_openai_api_key":
@@ -337,29 +325,41 @@ class Godcmd(Plugin):
                         ok, result = False, "当前对话机器人不支持重置会话"
                 logger.debug("[Godcmd] command: %s by %s" % (cmd, user))
             elif any(cmd in info["alias"] for info in ADMIN_COMMANDS.values()):
-                if isadmin:
-                    if isgroup:
-                        ok, result = False, "群聊不可执行管理员指令"
-                    else:
-                        cmd = next(c for c, info in ADMIN_COMMANDS.items() if cmd in info["alias"])
-                        if cmd == "stop":
-                            self.isrunning = False
-                            ok, result = True, "服务已暂停"
-                        elif cmd == "resume":
-                            self.isrunning = True
-                            ok, result = True, "服务已恢复"
-                        elif cmd == "reconf":
-                            load_config()
-                            ok, result = True, "配置已重载"
-                        elif cmd == "resetall":
-                            if bottype in [const.OPEN_AI, const.CHATGPT, const.CHATGPTONAZURE, const.LINKAI,
-                                           const.BAIDU, const.XUNFEI]:
-                                channel.cancel_all_session()
-                                bot.sessions.clear_all_session()
-                                ok, result = True, "重置所有会话成功"
+                if isadmin or self.is_admin_in_group(e_context["context"]):
+                    # 私聊+群聊管理员命令
+                    cmd = next(c for c, info in ADMIN_COMMANDS.items() if cmd in info["alias"])
+                    if cmd == "stop":
+                        self.isrunning = False
+                        ok, result = True, "服务已暂停"
+                    elif cmd == "resume":
+                        self.isrunning = True
+                        ok, result = True, "服务已恢复"
+                    elif cmd == "reconf":
+                        load_config()
+                        ok, result = True, "配置已重载"
+                    elif cmd == "resetall":
+                        if bottype in [const.OPEN_AI, const.CHATGPT, const.CHATGPTONAZURE, const.LINKAI,
+                                        const.BAIDU, const.XUNFEI]:
+                            channel.cancel_all_session()
+                            bot.sessions.clear_all_session()
+                            ok, result = True, "重置所有会话成功"
+                        else:
+                            ok, result = False, "当前对话机器人不支持重置会话"
+                    elif cmd == "model":
+                        if len(args) == 0:
+                            ok, result = True, "当前默认模型为: " + str(conf().get("model"))
+                        elif len(args) == 1:
+                            if args[0] not in conf().get("model_list"):
+                                ok, result = False, "模型名称不存在"
                             else:
-                                ok, result = False, "当前对话机器人不支持重置会话"
-                        elif cmd == "debug":
+                                conf()["model"] = args[0]
+                                Bridge().reset_bot()
+                                ok, result = True, "默认模型设置为: " + str(conf().get("model"))
+                        else:
+                            ok, result = False, "群聊不可执行管理员指令"
+                    if not isgroup:
+                        # 私聊管理员命令
+                        if cmd == "debug":
                             if logger.getEffectiveLevel() == logging.DEBUG:  # 判断当前日志模式是否DEBUG
                                 logger.setLevel(logging.INFO)
                                 ok, result = True, "DEBUG模式已关闭"

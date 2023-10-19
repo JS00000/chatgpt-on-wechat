@@ -47,7 +47,7 @@ class XunFeiBot(Bot):
         self.host = urlparse(self.spark_url).netloc
         self.path = urlparse(self.spark_url).path
         # 和wenxin使用相同的session机制
-        self.sessions = SessionManager(BaiduWenxinSession, model=const.XUNFEI)
+        self.sessions = SessionManager(BaiduWenxinSession, default_model="xunfei")
 
     def reply(self, query, context: Context = None) -> Reply:
         if context.type == ContextType.TEXT:

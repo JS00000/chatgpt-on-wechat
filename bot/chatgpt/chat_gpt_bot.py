@@ -31,9 +31,8 @@ class ChatGPTBot(Bot, OpenAIImage):
         if conf().get("rate_limit_chatgpt"):
             self.tb4chatgpt = TokenBucket(conf().get("rate_limit_chatgpt", 20))
 
-        self.sessions = SessionManager(ChatGPTSession, model=conf().get("model") or "gpt-3.5-turbo")
+        self.sessions = SessionManager(ChatGPTSession, default_model="gpt-3.5-turbo")
         self.args = {
-            "model": conf().get("model") or "gpt-3.5-turbo",  # 对话模型的名称
             "temperature": conf().get("temperature", 0.9),  # 值在[0,1]之间，越大表示回复越具有不确定性
             # "max_tokens":4096,  # 回复最大的字符数
             "top_p": conf().get("top_p", 1),
@@ -62,11 +61,9 @@ class ChatGPTBot(Bot, OpenAIImage):
                 reply = Reply(ReplyType.INFO, "配置已更新")
             if reply:
                 return reply
-            session = self.sessions.session_query(query, session_id)
-            logger.debug("[CHATGPT] session query={}".format(session.messages))
 
-            self.args["model"] = context.get("model") or conf().get("model")
-            self.args["engine"] = context.get("model") or conf().get("model")
+            session = self.sessions.session_query(query, session_id, context.get("model"))
+            logger.debug("[CHATGPT] session query={}, model={}".format(session.messages, session.model))
 
             reply_content = self.reply_text(session)
             logger.debug(
@@ -110,6 +107,8 @@ class ChatGPTBot(Bot, OpenAIImage):
         try:
             if conf().get("rate_limit_chatgpt") and not self.tb4chatgpt.get_token():
                 raise openai.error.RateLimitError("RateLimitError: rate limit exceeded")
+            self.args["model"] = session.model
+            self.args["engine"] = session.model
             response = openai.ChatCompletion.create(messages=session.messages, **self.args)
             # logger.debug("[CHATGPT] response={}".format(response))
             # logger.info("[ChatGPT] reply={}, total_tokens={}".format(response.choices[0]['message']['content'], response["usage"]["total_tokens"]))

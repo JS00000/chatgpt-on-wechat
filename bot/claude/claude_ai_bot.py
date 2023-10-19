@@ -16,7 +16,7 @@ from config import conf
 class ClaudeAIBot(Bot, OpenAIImage):
     def __init__(self):
         super().__init__()
-        self.sessions = SessionManager(ClaudeAiSession, model=conf().get("model") or "gpt-3.5-turbo")
+        self.sessions = SessionManager(ClaudeAiSession, default_model="claude")
         self.claude_api_cookie = conf().get("claude_api_cookie")
         self.proxy = conf().get("proxy")
         self.con_uuid_dic = {}
@@ -139,11 +139,9 @@ class ClaudeAIBot(Bot, OpenAIImage):
             session = self.sessions.session_query(query, session_id)
             con_uuid = self.conversation_share_check(session_id)
 
-            model = conf().get("model") or "gpt-3.5-turbo"
             # remove system message
             if session.messages[0].get("role") == "system":
-                if model == "wenxin" or model == "claude":
-                    session.messages.pop(0)
+                session.messages.pop(0)
             logger.info(f"[CLAUDEAI] query={query}")
 
             # do http request

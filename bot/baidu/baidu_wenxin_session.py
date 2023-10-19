@@ -11,9 +11,8 @@ from common.log import logger
 
 
 class BaiduWenxinSession(Session):
-    def __init__(self, session_id, system_prompt=None, model="gpt-3.5-turbo"):
-        super().__init__(session_id, system_prompt)
-        self.model = model
+    def __init__(self, session_id, system_prompt=None, model="wenxin"):
+        super().__init__(session_id, system_prompt, model)
         # 百度文心不支持system prompt
         # self.reset()
 

@@ -48,9 +48,10 @@ class ChatChannel(Channel):
         if first_in:  # context首次传入时，receiver是None，根据类型设置receiver
             config = conf()
             cmsg = context["msg"]
-            user_data = conf().get_user_data(cmsg.from_user_id)
+            # user's model setting or global model setting
+            user_data = config.get_user_data(cmsg.from_user_id)
             context["model"] = user_data.get("model") or conf().get("model")
-
+            
             if context.get("isgroup", False):
                 group_name = cmsg.other_user_nickname
                 group_id = cmsg.other_user_id

@@ -22,7 +22,7 @@ class LinkAIBot(Bot, OpenAIImage):
 
     def __init__(self):
         super().__init__()
-        self.sessions = SessionManager(ChatGPTSession, model=conf().get("model") or "gpt-3.5-turbo")
+        self.sessions = SessionManager(ChatGPTSession, default_model=conf().get("model") or "gpt-3.5-turbo")
         self.args = {}
 
     def reply(self, query, context: Context = None) -> Reply:

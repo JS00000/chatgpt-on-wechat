@@ -16,7 +16,7 @@ class BaiduWenxinBot(Bot):
 
     def __init__(self):
         super().__init__()
-        self.sessions = SessionManager(BaiduWenxinSession, model=conf().get("baidu_wenxin_model") or "eb-instant")
+        self.sessions = SessionManager(BaiduWenxinSession, default_model="wenxin-turbo")
 
     def reply(self, query, context=None):
         # acquire reply content
@@ -32,7 +32,7 @@ class BaiduWenxinBot(Bot):
                     self.sessions.clear_all_session()
                     reply = Reply(ReplyType.INFO, "所有人记忆已清除")
                 else:
-                    session = self.sessions.session_query(query, session_id)
+                    session = self.sessions.session_query(query, session_id, context.get("model"))
                     result = self.reply_text(session)
                     total_tokens, completion_tokens, reply_content = (
                         result["total_tokens"],
@@ -69,7 +69,10 @@ class BaiduWenxinBot(Bot):
                     "completion_tokens": 0,
                     "content": 0,
                     }
-            url = "https://aip.baidubce.com/rpc/2.0/ai_custom/v1/wenxinworkshop/chat/" + session.model + "?access_token=" + access_token
+            model2url = {"wenxin": "completions", 
+                         "wenxin-turbo": "eb-instant", 
+                         "wenxin-4": "completions_pro"}
+            url = "https://aip.baidubce.com/rpc/2.0/ai_custom/v1/wenxinworkshop/chat/" + model2url[session.model] + "?access_token=" + access_token
             headers = {
                 'Content-Type': 'application/json'
             }
